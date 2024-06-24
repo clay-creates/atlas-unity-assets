@@ -29,12 +29,12 @@ public abstract class ItemDatabase<T> : EditorWindow where T : class
         GUILayout.EndHorizontal();
     }
 
-    protected void DeleteSelectedItem()
+    protected virtual void DeleteSelectedItem()
     {
         //Delete item
     }
 
-    protected void DuplicateSelectedItem()
+    protected virtual void DuplicateSelectedItem()
     {
         //Duplicate item
     }
@@ -43,7 +43,7 @@ public abstract class ItemDatabase<T> : EditorWindow where T : class
 
     protected abstract void ImportItemsFromCSV();
 
-    protected void DrawTopLeftOptions()
+    protected virtual void DrawTopLeftOptions()
     {
         GUILayout.Label("Database Admin Functions:", EditorStyles.boldLabel);
         if (GUILayout.Button("Export to CSV")) ExportItemsToCSV();
@@ -53,4 +53,5 @@ public abstract class ItemDatabase<T> : EditorWindow where T : class
         
         // ... additional top-left options, like 'Create New Item' or 'Search' ...
     }
+
 }

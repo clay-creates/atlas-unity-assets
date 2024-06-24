@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEditor;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 
 public class DatabasesManager : EditorWindow
 {
@@ -33,9 +35,26 @@ public class DatabasesManager : EditorWindow
         EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
         EditorGUILayout.Space();
 
+        if (GUILayout.Button("Weapon Database"))
+        {
+            WeaponDatabase wb = (WeaponDatabase)EditorWindow.GetWindow(typeof(WeaponDatabase), false, "WeaponDatabase");
+        }
+
+        if (GUILayout.Button("Armor Database"))
+        {
+            ArmorDatabase wb = (ArmorDatabase)EditorWindow.GetWindow(typeof(ArmorDatabase), false, "ArmorDatabase");
+        }
+
+        if (GUILayout.Button("Potion Database"))
+        {
+            PotionDatabase wb = (PotionDatabase)EditorWindow.GetWindow(typeof(PotionDatabase), false, "PotionDatabase");
+        }
+
         // Buttons to access other windows
         // if (GUILayout.Button("Weapon Database")) WeaponDatabase.ShowWindow();
         // if (GUILayout.Button("Potion Database")) PotionDatabase.ShowWindow();
         // if (GUILayout.Button("Armor Database")) ArmorDatabase.ShowWindow();
     }
+
+
 }

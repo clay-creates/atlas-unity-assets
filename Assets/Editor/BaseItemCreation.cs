@@ -11,6 +11,7 @@ public abstract class BaseItemCreation<T> : EditorWindow where T : BaseItem
     protected float baseValue;
     protected int requiredLevel;
     protected Rarity rarity;
+    public EquipSlot equipSlot;
     
     public static void ShowWindow()
     {
@@ -25,11 +26,19 @@ public abstract class BaseItemCreation<T> : EditorWindow where T : BaseItem
         baseValue = EditorGUILayout.FloatField("Base Value:", baseValue);
         requiredLevel = EditorGUILayout.IntField("Required Level:", requiredLevel);
         rarity = (Rarity)EditorGUILayout.EnumPopup("Rarity:", rarity);
+        equipSlot = (EquipSlot)EditorGUILayout.EnumPopup("Equip Slot:", equipSlot);
     }
 
-    protected void CreateItem<T>() where T : BaseItem
+    protected void CreateItem(T newItem)
     {
-        T newItem = CreateInstance<T>();
+        // Assign entered values to the item fields
+        newItem.itemName = itemName;
+        newItem.icon = icon;
+        newItem.description = description;
+        newItem.baseValue = baseValue;
+        newItem.requiredLevel = requiredLevel;
+        newItem.rarity = rarity;
+        newItem.equipSlot = equipSlot;
 
         // Determine the folder path based on the type of item
         string folderPath = "Assets/Items/";
@@ -53,16 +62,14 @@ public abstract class BaseItemCreation<T> : EditorWindow where T : BaseItem
             AssetDatabase.Refresh();
         }
 
+        EditorUtility.SetDirty(newItem);
+
         // Define the full path for the asset
         string fullPath = folderPath + itemName + ".asset";
         fullPath = AssetDatabase.GenerateUniqueAssetPath(fullPath);
 
         AssetDatabase.CreateAsset(newItem, fullPath);
-        
-        newItem.itemName = itemName;
-        newItem.baseValue = baseValue;
-        newItem.rarity = rarity;
-        
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
     }
