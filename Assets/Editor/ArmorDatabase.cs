@@ -3,25 +3,44 @@ using UnityEditor;
 using UnityEngine;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System;
+using static Codice.Client.Common.Connection.AskCredentialsToUser;
 
 public class ArmorDatabase : ItemDatabase<Armor>
 {
-    private new Armor selectedItem;
     private string newItemName = "";
     private bool isDuplicateName = false;
     private bool hasInvalidCharacter = false;
 
     private Regex nameValidationRegex = new Regex(@"^[a-zA-Z0-9 \-']*$");
 
+    private string searchQuery = "";
+    private ArmorType[] armorTypes; // Array to hold all armor types
+    private int selectedArmorTypeIndex = 0;
+
+    private List<Armor> filteredArmors = new List<Armor>();
+
     protected override void DrawItemList()
     {
+        DrawSearchBar();
+        DrawFilters();
+
         scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(position.width - propertiesSectionWidth - 20), GUILayout.Height(position.height - 20));
 
-        string[] guids = AssetDatabase.FindAssets("t:Armor");
-        foreach (string guid in guids)
+        FilterArmors();
+
+        if (filteredArmors.Count == 0)
         {
-            Armor armor = AssetDatabase.LoadAssetAtPath<Armor>(AssetDatabase.GUIDToAssetPath(guid));
-            if (armor != null)
+            EditorGUILayout.LabelField("No items match your search criteria.");
+            if (GUILayout.Button("Reset Search"))
+            {
+                searchQuery = "";
+                selectedArmorTypeIndex = 0;
+            }
+        }
+        else
+        {
+            foreach (Armor armor in filteredArmors)
             {
                 EditorGUILayout.BeginHorizontal(GUI.skin.box);
                 GUILayout.Box(armor.icon ? armor.icon.texture : Texture2D.grayTexture, GUILayout.Width(50), GUILayout.Height(50));
@@ -43,11 +62,67 @@ public class ArmorDatabase : ItemDatabase<Armor>
         GUILayout.EndScrollView();
     }
 
+    private void DrawSearchBar()
+    {
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Search:", GUILayout.Width(50));
+        searchQuery = EditorGUILayout.TextField(searchQuery);
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawFilters()
+    {
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Type:", GUILayout.Width(50));
+        selectedArmorTypeIndex = EditorGUILayout.Popup(selectedArmorTypeIndex, GetArmorTypeNames());
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private string[] GetArmorTypeNames()
+    {
+        if (armorTypes == null)
+        {
+            armorTypes = (ArmorType[])Enum.GetValues(typeof(ArmorType));
+        }
+
+        string[] names = new string[armorTypes.Length + 1];
+        names[0] = "All";
+        for (int i = 0; i < armorTypes.Length; i++)
+        {
+            names[i + 1] = armorTypes[i].ToString();
+        }
+
+        return names;
+    }
+
+    private void FilterArmors()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:Armor");
+        filteredArmors.Clear();
+
+        foreach (string guid in guids)
+        {
+            Armor armor = AssetDatabase.LoadAssetAtPath<Armor>(AssetDatabase.GUIDToAssetPath(guid));
+            if (armor != null)
+            {
+                bool matchesSearchQuery = armor.itemName.ToLower().Contains(searchQuery.ToLower());
+                bool matchesArmorType = selectedArmorTypeIndex == 0 || armor.armorType.HasFlag(armorTypes[selectedArmorTypeIndex - 1]);
+
+                // Debug logs to see the values
+                Debug.Log($"Armor: {armor.itemName}, Search Query Match: {matchesSearchQuery}, Armor Type Match: {matchesArmorType}, Armor Type: {armor.armorType}, Selected Type: {(selectedArmorTypeIndex == 0 ? "All" : armorTypes[selectedArmorTypeIndex - 1].ToString())}");
+                if (matchesSearchQuery && matchesArmorType)
+                {
+                    filteredArmors.Add(armor);
+                }
+            }
+        }
+    }
+
     protected override void DrawPropertiesSection()
     {
         if (selectedItem != null)
         {
-            EditorGUILayout.LabelField("Weapon Properties", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Armor Properties", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Name: ");
@@ -81,7 +156,7 @@ public class ArmorDatabase : ItemDatabase<Armor>
 
             GUI.color = Color.white;
 
-            // Editable fields for the weapon properties
+            // Editable fields for the armor properties
             selectedItem.itemName = newItemName;
             selectedItem.description = EditorGUILayout.TextField("Description: ", selectedItem.description);
             selectedItem.baseValue = EditorGUILayout.FloatField("Base Value: ", selectedItem.baseValue);
@@ -110,7 +185,7 @@ public class ArmorDatabase : ItemDatabase<Armor>
         }
         else
         {
-            EditorGUILayout.LabelField("Select a weapon to see its properties.");
+            EditorGUILayout.LabelField("Select a armor to see its properties.");
         }
     }
 
@@ -166,7 +241,7 @@ public class ArmorDatabase : ItemDatabase<Armor>
 
     private bool CheckForDuplicateName(string name, Armor currentarmor)
     {
-        string[] guids = AssetDatabase.FindAssets("t:armor");
+        string[] guids = AssetDatabase.FindAssets("t:Armor");
         foreach (string guid in guids)
         {
             Armor armor = AssetDatabase.LoadAssetAtPath<Armor>(AssetDatabase.GUIDToAssetPath(guid));
@@ -192,5 +267,10 @@ public class ArmorDatabase : ItemDatabase<Armor>
         GUILayout.EndVertical();
 
         GUILayout.EndHorizontal();
+    }
+
+    private void OnInspectorUpdate()
+    {
+        Repaint();
     }
 }

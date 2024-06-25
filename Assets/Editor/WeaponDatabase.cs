@@ -7,7 +7,7 @@ using System;
 
 public class WeaponDatabase : ItemDatabase<Weapon>
 {
-    private new Weapon selectedItem;
+ 
     private string newItemName = "";
     private bool isDuplicateName = false;
     private bool hasInvalidCharacter = false;
@@ -51,7 +51,7 @@ public class WeaponDatabase : ItemDatabase<Weapon>
                 EditorGUILayout.EndVertical();
                 if (GUILayout.Button("Select", GUILayout.Width(60)))
                 {
-                    selectedItem = weapon;
+                    selectedItem = weapon; // Use the base class's selectedItem
                     newItemName = selectedItem.itemName; // Keep track of the selected item name
                     Repaint();
                 }
@@ -85,10 +85,11 @@ public class WeaponDatabase : ItemDatabase<Weapon>
             weaponTypes = (WeaponType[])Enum.GetValues(typeof(WeaponType));
         }
 
-        string[] names = new string[weaponTypes.Length];
+        string[] names = new string[weaponTypes.Length + 1];
+        names[0] = "All";
         for (int i = 0; i < weaponTypes.Length; i++)
         {
-            names[i] = weaponTypes[i].ToString();
+            names[i + 1] = weaponTypes[i].ToString();
         }
 
         return names;
@@ -104,8 +105,13 @@ public class WeaponDatabase : ItemDatabase<Weapon>
             Weapon weapon = AssetDatabase.LoadAssetAtPath<Weapon>(AssetDatabase.GUIDToAssetPath(guid));
             if (weapon != null)
             {
-                if (weapon.itemName.ToLower().Contains(searchQuery.ToLower()) &&
-                    (selectedWeaponTypeIndex == 0 || weapon.weaponType.HasFlag(weaponTypes[selectedWeaponTypeIndex - 1])))
+                bool matchesSearchQuery = weapon.itemName.ToLower().Contains(searchQuery.ToLower());
+                bool matchesWeaponType = selectedWeaponTypeIndex == 0 || weapon.weaponType.HasFlag(weaponTypes[selectedWeaponTypeIndex - 1]);
+
+                // Debug logs to see the values
+                Debug.Log($"Weapon: {weapon.itemName}, Search Query Match: {matchesSearchQuery}, Weapon Type Match: {matchesWeaponType}, Weapon Type: {weapon.weaponType}, Selected Type: {(selectedWeaponTypeIndex == 0 ? "All" : weaponTypes[selectedWeaponTypeIndex - 1].ToString())}");
+
+                if (matchesSearchQuery && matchesWeaponType)
                 {
                     filteredWeapons.Add(weapon);
                 }
