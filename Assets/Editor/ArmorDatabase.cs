@@ -4,7 +4,7 @@ using UnityEngine;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System;
-using static Codice.Client.Common.Connection.AskCredentialsToUser;
+using System.IO;
 
 public class ArmorDatabase : ItemDatabase<Armor>
 {
@@ -15,8 +15,7 @@ public class ArmorDatabase : ItemDatabase<Armor>
     private Regex nameValidationRegex = new Regex(@"^[a-zA-Z0-9 \-']*$");
 
     private string searchQuery = "";
-    private ArmorType[] armorTypes; // Array to hold all armor types
-    private int selectedArmorTypeIndex = 0;
+    private ArmorType selectedArmorType = ArmorType.None;
 
     private List<Armor> filteredArmors = new List<Armor>();
 
@@ -24,6 +23,7 @@ public class ArmorDatabase : ItemDatabase<Armor>
     {
         DrawSearchBar();
         DrawFilters();
+        DrawItemCount();
 
         scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(position.width - propertiesSectionWidth - 20), GUILayout.Height(position.height - 20));
 
@@ -34,8 +34,7 @@ public class ArmorDatabase : ItemDatabase<Armor>
             EditorGUILayout.LabelField("No items match your search criteria.");
             if (GUILayout.Button("Reset Search"))
             {
-                searchQuery = "";
-                selectedArmorTypeIndex = 0;
+                ResetFilters();
             }
         }
         else
@@ -74,25 +73,13 @@ public class ArmorDatabase : ItemDatabase<Armor>
     {
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("Type:", GUILayout.Width(50));
-        selectedArmorTypeIndex = EditorGUILayout.Popup(selectedArmorTypeIndex, GetArmorTypeNames());
+        selectedArmorType = (ArmorType)EditorGUILayout.EnumPopup(selectedArmorType);
         EditorGUILayout.EndHorizontal();
     }
 
-    private string[] GetArmorTypeNames()
+    private void DrawItemCount()
     {
-        if (armorTypes == null)
-        {
-            armorTypes = (ArmorType[])Enum.GetValues(typeof(ArmorType));
-        }
-
-        string[] names = new string[armorTypes.Length + 1];
-        names[0] = "All";
-        for (int i = 0; i < armorTypes.Length; i++)
-        {
-            names[i + 1] = armorTypes[i].ToString();
-        }
-
-        return names;
+        EditorGUILayout.LabelField($"Total Items: {filteredArmors.Count}");
     }
 
     private void FilterArmors()
@@ -105,17 +92,22 @@ public class ArmorDatabase : ItemDatabase<Armor>
             Armor armor = AssetDatabase.LoadAssetAtPath<Armor>(AssetDatabase.GUIDToAssetPath(guid));
             if (armor != null)
             {
-                bool matchesSearchQuery = armor.itemName.ToLower().Contains(searchQuery.ToLower());
-                bool matchesArmorType = selectedArmorTypeIndex == 0 || armor.armorType.HasFlag(armorTypes[selectedArmorTypeIndex - 1]);
+                bool matchesSearchQuery = string.IsNullOrEmpty(searchQuery) || armor.itemName.ToLower().Contains(searchQuery.ToLower());
+                bool matchesArmorType = selectedArmorType == ArmorType.None || armor.armorType.HasFlag(selectedArmorType);
 
-                // Debug logs to see the values
-                Debug.Log($"Armor: {armor.itemName}, Search Query Match: {matchesSearchQuery}, Armor Type Match: {matchesArmorType}, Armor Type: {armor.armorType}, Selected Type: {(selectedArmorTypeIndex == 0 ? "All" : armorTypes[selectedArmorTypeIndex - 1].ToString())}");
                 if (matchesSearchQuery && matchesArmorType)
                 {
                     filteredArmors.Add(armor);
                 }
             }
         }
+    }
+
+    private void ResetFilters()
+    {
+        searchQuery = "";
+        selectedArmorType = ArmorType.None;
+        FilterArmors();
     }
 
     protected override void DrawPropertiesSection()
@@ -191,12 +183,85 @@ public class ArmorDatabase : ItemDatabase<Armor>
 
     protected override void ExportItemsToCSV()
     {
-        // Export functionality implementation
+        string path = EditorUtility.SaveFilePanel("Export Armor Data to CSV", "", "ArmorData.csv", "csv");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(path))
+            {
+                // Write header
+                writer.WriteLine("Item Name\tIcon Path\tArmor Type\tAttack Power\tAttack Speed\tDurability\tRange\tCritical Hit Chance\tBase Value\tRarity\tRequired Level\tEquip Slot\tDescription");
+
+                // Write armor data
+                string[] guids = AssetDatabase.FindAssets("t:Armor");
+                foreach (string guid in guids)
+                {
+                    Armor armor = AssetDatabase.LoadAssetAtPath<Armor>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (armor != null)
+                    {
+                        string line = $"{armor.itemName}\t" +
+                                      $"{AssetDatabase.GetAssetPath(armor.icon)}\t" +
+                                      $"{armor.armorType}\t" +
+                                      $"{armor.defensePower}\t" +
+                                      $"{armor.resistance}\t" +
+                                      $"{armor.weight}\t" +
+                                      $"{armor.movementSpeedModifier}\t" +
+                                      $"{armor.baseValue}\t" +
+                                      $"{armor.rarity}\t" +
+                                      $"{armor.requiredLevel}\t" +
+                                      $"{armor.equipSlot}\t" +
+                                      $"{armor.description}";
+
+                        writer.WriteLine(line);
+                    }
+                }
+            }
+            Debug.Log("Armor data successfully exported to CSV.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to export armor data to CSV: {e.Message}");
+        }
     }
 
     protected override void ImportItemsFromCSV()
     {
-        // Import functionality implementation
+        string path = EditorUtility.OpenFilePanel("Import Armor Data from CSV", "", "csv");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            string[] lines = File.ReadAllLines(path);
+            foreach (string line in lines.Skip(1)) // Skip header line
+            {
+                string[] values = line.Split('\t'); // Using tab as delimiter
+
+                Armor newArmor = ScriptableObject.CreateInstance<Armor>();
+                newArmor.itemName = values[0];
+                newArmor.icon = AssetDatabase.LoadAssetAtPath<Sprite>(values[1]);
+                newArmor.armorType = (ArmorType)Enum.Parse(typeof(ArmorType), values[2]);
+                newArmor.defensePower = float.Parse(values[3]);
+                newArmor.resistance = float.Parse(values[4]);
+                newArmor.weight = float.Parse(values[5]);
+                newArmor.movementSpeedModifier = float.Parse(values[6]);
+                newArmor.baseValue = float.Parse(values[7]);
+                newArmor.rarity = (Rarity)Enum.Parse(typeof(Rarity), values[8]);
+                newArmor.requiredLevel = int.Parse(values[9]);
+                newArmor.equipSlot = (EquipSlot)Enum.Parse(typeof(EquipSlot), values[10]);
+                newArmor.description = values[11];
+
+                string assetPath = $"Assets/Resources/Armors/{newArmor.itemName}.asset";
+                AssetDatabase.CreateAsset(newArmor, assetPath);
+            }
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("Armor data successfully imported from CSV.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to import armor data from CSV: {e.Message}");
+        }
     }
 
     protected override void DeleteSelectedItem()

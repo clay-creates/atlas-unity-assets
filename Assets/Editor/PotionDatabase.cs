@@ -4,7 +4,7 @@ using UnityEngine;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System;
-using static Codice.Client.Common.Connection.AskCredentialsToUser;
+using System.IO;
 
 public class PotionDatabase : ItemDatabase<Potion>
 {
@@ -15,8 +15,7 @@ public class PotionDatabase : ItemDatabase<Potion>
     private Regex nameValidationRegex = new Regex(@"^[a-zA-Z0-9 \-']*$");
 
     private string searchQuery = "";
-    private PotionEffect[] potionEffects; // Array to hold all potion types
-    private int selectedPotionEffectIndex = 0;
+    private PotionEffect selectedPotionEffect = PotionEffect.None;
 
     private List<Potion> filteredPotions = new List<Potion>();
 
@@ -24,6 +23,7 @@ public class PotionDatabase : ItemDatabase<Potion>
     {
         DrawSearchBar();
         DrawFilters();
+        DrawItemCount();
 
         scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(position.width - propertiesSectionWidth - 20), GUILayout.Height(position.height - 20));
 
@@ -34,8 +34,7 @@ public class PotionDatabase : ItemDatabase<Potion>
             EditorGUILayout.LabelField("No items match your search criteria.");
             if (GUILayout.Button("Reset Search"))
             {
-                searchQuery = "";
-                selectedPotionEffectIndex = 0;
+                ResetFilters();
             }
         }
         else
@@ -74,25 +73,13 @@ public class PotionDatabase : ItemDatabase<Potion>
     {
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("Type:", GUILayout.Width(50));
-        selectedPotionEffectIndex = EditorGUILayout.Popup(selectedPotionEffectIndex, GetPotionTypeNames());
+        selectedPotionEffect = (PotionEffect)EditorGUILayout.EnumPopup(selectedPotionEffect);
         EditorGUILayout.EndHorizontal();
     }
 
-    private string[] GetPotionTypeNames()
+    private void DrawItemCount()
     {
-        if (potionEffects == null)
-        {
-            potionEffects = (PotionEffect[])Enum.GetValues(typeof(PotionEffect));
-        }
-
-        string[] names = new string[potionEffects.Length + 1];
-        names[0] = "All";
-        for (int i = 0; i < potionEffects.Length; i++)
-        {
-            names[i + 1] = potionEffects[i].ToString();
-        }
-
-        return names;
+        EditorGUILayout.LabelField($"Total Items: {filteredPotions.Count}");
     }
 
     private void FilterPotions()
@@ -105,17 +92,22 @@ public class PotionDatabase : ItemDatabase<Potion>
             Potion potion = AssetDatabase.LoadAssetAtPath<Potion>(AssetDatabase.GUIDToAssetPath(guid));
             if (potion != null)
             {
-                bool matchesSearchQuery = potion.itemName.ToLower().Contains(searchQuery.ToLower());
-                bool matchesPotionEffect = selectedPotionEffectIndex == 0 || potion.potionEffect.HasFlag(potionEffects[selectedPotionEffectIndex - 1]);
+                bool matchesSearchQuery = string.IsNullOrEmpty(searchQuery) || potion.itemName.ToLower().Contains(searchQuery.ToLower());
+                bool matchesPotionEffect = selectedPotionEffect == PotionEffect.None || potion.potionEffect.HasFlag(selectedPotionEffect);
 
-                // Debug logs to see the values
-                Debug.Log($"Potion: {potion.itemName}, Search Query Match: {matchesSearchQuery}, Potion Effect Match: {matchesPotionEffect}, Potion Effect: {potion.potionEffect}, Selected Effect: {(selectedPotionEffectIndex == 0 ? "All" : potionEffects[selectedPotionEffectIndex - 1].ToString())}");
                 if (matchesSearchQuery && matchesPotionEffect)
                 {
                     filteredPotions.Add(potion);
                 }
             }
         }
+    }
+
+    private void ResetFilters()
+    {
+        searchQuery = "";
+        selectedPotionEffect = PotionEffect.None;
+        FilterPotions();
     }
 
     protected override void DrawPropertiesSection()
@@ -191,12 +183,85 @@ public class PotionDatabase : ItemDatabase<Potion>
 
     protected override void ExportItemsToCSV()
     {
-        // Export functionality implementation
+        string path = EditorUtility.SaveFilePanel("Export Potion Data to CSV", "", "PotionData.csv", "csv");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(path))
+            {
+                // Write header
+                writer.WriteLine("Item Name\tIcon Path\tPotion Type\tAttack Power\tAttack Speed\tDurability\tRange\tCritical Hit Chance\tBase Value\tRarity\tRequired Level\tEquip Slot\tDescription");
+
+                // Write potion data
+                string[] guids = AssetDatabase.FindAssets("t:Potion");
+                foreach (string guid in guids)
+                {
+                    Potion potion = AssetDatabase.LoadAssetAtPath<Potion>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (potion != null)
+                    {
+                        string line = $"{potion.itemName}\t" +
+                                      $"{AssetDatabase.GetAssetPath(potion.icon)}\t" +
+                                      $"{potion.potionEffect}\t" +
+                                      $"{potion.effectPower}\t" +
+                                      $"{potion.duration}\t" +
+                                      $"{potion.cooldown}\t" +
+                                      $"{potion.isStackable}\t" +
+                                      $"{potion.baseValue}\t" +
+                                      $"{potion.rarity}\t" +
+                                      $"{potion.requiredLevel}\t" +
+                                      $"{potion.equipSlot}\t" +
+                                      $"{potion.description}";
+
+                        writer.WriteLine(line);
+                    }
+                }
+            }
+            Debug.Log("Potion data successfully exported to CSV.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to export potion data to CSV: {e.Message}");
+        }
     }
 
     protected override void ImportItemsFromCSV()
     {
-        // Import functionality implementation
+        string path = EditorUtility.OpenFilePanel("Import Potion Data from CSV", "", "csv");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            string[] lines = File.ReadAllLines(path);
+            foreach (string line in lines.Skip(1)) // Skip header line
+            {
+                string[] values = line.Split('\t'); // Using tab as delimiter
+
+                Potion newPotion = ScriptableObject.CreateInstance<Potion>();
+                newPotion.itemName = values[0];
+                newPotion.icon = AssetDatabase.LoadAssetAtPath<Sprite>(values[1]);
+                newPotion.potionEffect = (PotionEffect)Enum.Parse(typeof(PotionEffect), values[2]);
+                newPotion.effectPower = float.Parse(values[3]);
+                newPotion.duration = float.Parse(values[4]);
+                newPotion.cooldown = float.Parse(values[5]);
+                newPotion.isStackable = bool.Parse(values[6]);
+                newPotion.baseValue = float.Parse(values[7]);
+                newPotion.rarity = (Rarity)Enum.Parse(typeof(Rarity), values[8]);
+                newPotion.requiredLevel = int.Parse(values[9]);
+                newPotion.equipSlot = (EquipSlot)Enum.Parse(typeof(EquipSlot), values[10]);
+                newPotion.description = values[11];
+
+                string assetPath = $"Assets/Resources/Potions/{newPotion.itemName}.asset";
+                AssetDatabase.CreateAsset(newPotion, assetPath);
+            }
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("Potion data successfully imported from CSV.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to import potion data from CSV: {e.Message}");
+        }
     }
 
     protected override void DeleteSelectedItem()

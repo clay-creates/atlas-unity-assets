@@ -1,13 +1,14 @@
+using System;
 using System.Collections.Generic;
-using UnityEditor;
-using UnityEngine;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System;
+using UnityEditor;
+using UnityEngine;
 
 public class WeaponDatabase : ItemDatabase<Weapon>
 {
- 
+    private new Weapon selectedItem;
     private string newItemName = "";
     private bool isDuplicateName = false;
     private bool hasInvalidCharacter = false;
@@ -15,8 +16,7 @@ public class WeaponDatabase : ItemDatabase<Weapon>
     private Regex nameValidationRegex = new Regex(@"^[a-zA-Z0-9 \-']*$");
 
     private string searchQuery = "";
-    private WeaponType[] weaponTypes; // Array to hold all weapon types
-    private int selectedWeaponTypeIndex = 0;
+    private WeaponType selectedWeaponType = WeaponType.None;
 
     private List<Weapon> filteredWeapons = new List<Weapon>();
 
@@ -24,6 +24,7 @@ public class WeaponDatabase : ItemDatabase<Weapon>
     {
         DrawSearchBar();
         DrawFilters();
+        DrawItemCount();
 
         scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(position.width - propertiesSectionWidth - 20), GUILayout.Height(position.height - 20));
 
@@ -32,10 +33,9 @@ public class WeaponDatabase : ItemDatabase<Weapon>
         if (filteredWeapons.Count == 0)
         {
             EditorGUILayout.LabelField("No items match your search criteria.");
-            if (GUILayout.Button("Reset Search"))
+            if (GUILayout.Button("Reset Filters"))
             {
-                searchQuery = "";
-                selectedWeaponTypeIndex = 0;
+                ResetFilters();
             }
         }
         else
@@ -51,7 +51,7 @@ public class WeaponDatabase : ItemDatabase<Weapon>
                 EditorGUILayout.EndVertical();
                 if (GUILayout.Button("Select", GUILayout.Width(60)))
                 {
-                    selectedItem = weapon; // Use the base class's selectedItem
+                    selectedItem = weapon;
                     newItemName = selectedItem.itemName; // Keep track of the selected item name
                     Repaint();
                 }
@@ -74,25 +74,13 @@ public class WeaponDatabase : ItemDatabase<Weapon>
     {
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("Type:", GUILayout.Width(50));
-        selectedWeaponTypeIndex = EditorGUILayout.Popup(selectedWeaponTypeIndex, GetWeaponTypeNames());
+        selectedWeaponType = (WeaponType)EditorGUILayout.EnumPopup(selectedWeaponType);
         EditorGUILayout.EndHorizontal();
     }
 
-    private string[] GetWeaponTypeNames()
+    private void DrawItemCount()
     {
-        if (weaponTypes == null)
-        {
-            weaponTypes = (WeaponType[])Enum.GetValues(typeof(WeaponType));
-        }
-
-        string[] names = new string[weaponTypes.Length + 1];
-        names[0] = "All";
-        for (int i = 0; i < weaponTypes.Length; i++)
-        {
-            names[i + 1] = weaponTypes[i].ToString();
-        }
-
-        return names;
+        EditorGUILayout.LabelField($"Total Items: {filteredWeapons.Count}");
     }
 
     private void FilterWeapons()
@@ -105,11 +93,8 @@ public class WeaponDatabase : ItemDatabase<Weapon>
             Weapon weapon = AssetDatabase.LoadAssetAtPath<Weapon>(AssetDatabase.GUIDToAssetPath(guid));
             if (weapon != null)
             {
-                bool matchesSearchQuery = weapon.itemName.ToLower().Contains(searchQuery.ToLower());
-                bool matchesWeaponType = selectedWeaponTypeIndex == 0 || weapon.weaponType.HasFlag(weaponTypes[selectedWeaponTypeIndex - 1]);
-
-                // Debug logs to see the values
-                Debug.Log($"Weapon: {weapon.itemName}, Search Query Match: {matchesSearchQuery}, Weapon Type Match: {matchesWeaponType}, Weapon Type: {weapon.weaponType}, Selected Type: {(selectedWeaponTypeIndex == 0 ? "All" : weaponTypes[selectedWeaponTypeIndex - 1].ToString())}");
+                bool matchesSearchQuery = string.IsNullOrEmpty(searchQuery) || weapon.itemName.ToLower().Contains(searchQuery.ToLower());
+                bool matchesWeaponType = selectedWeaponType == WeaponType.None || weapon.weaponType.HasFlag(selectedWeaponType);
 
                 if (matchesSearchQuery && matchesWeaponType)
                 {
@@ -117,6 +102,13 @@ public class WeaponDatabase : ItemDatabase<Weapon>
                 }
             }
         }
+    }
+
+    private void ResetFilters()
+    {
+        searchQuery = "";
+        selectedWeaponType = WeaponType.None;
+        FilterWeapons();
     }
 
     protected override void DrawPropertiesSection()
@@ -193,12 +185,155 @@ public class WeaponDatabase : ItemDatabase<Weapon>
 
     protected override void ExportItemsToCSV()
     {
-        // Export functionality implementation
+        string path = EditorUtility.SaveFilePanel("Export Weapon Data to CSV", "", "WeaponData.csv", "csv");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(path))
+            {
+                // Write header
+                writer.WriteLine("Item Name,Icon Path,Weapon Type,Attack Power,Attack Speed,Durability,Range,Critical Hit Chance,Base Value,Rarity,Required Level,Equip Slot,Description");
+
+                // Write weapon data
+                string[] guids = AssetDatabase.FindAssets("t:Weapon");
+                foreach (string guid in guids)
+                {
+                    Weapon weapon = AssetDatabase.LoadAssetAtPath<Weapon>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (weapon != null)
+                    {
+                        string line = $"{EscapeString(weapon.itemName)}," +
+                                      $"{EscapeString(AssetDatabase.GetAssetPath(weapon.icon))}," +
+                                      $"{weapon.weaponType}," +
+                                      $"{weapon.attackPower}," +
+                                      $"{weapon.attackSpeed}," +
+                                      $"{weapon.durability}," +
+                                      $"{weapon.range}," +
+                                      $"{weapon.criticalHitChance}," +
+                                      $"{weapon.baseValue}," +
+                                      $"{weapon.rarity}," +
+                                      $"{weapon.requiredLevel}," +
+                                      $"{weapon.equipSlot}," +
+                                      $"{EscapeString(weapon.description)}";
+
+                        writer.WriteLine(line);
+                    }
+                }
+            }
+            Debug.Log("Weapon data successfully exported to CSV.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to export weapon data to CSV: {e.Message}");
+        }
+    }
+
+
+    private string EscapeString(string str)
+    {
+        if (str.Contains("\t") || str.Contains("\n") || str.Contains("\""))
+        {
+            str = str.Replace("\"", "\"\"");
+            str = $"\"{str}\"";
+        }
+        return str;
     }
 
     protected override void ImportItemsFromCSV()
     {
-        // Import functionality implementation
+        string path = EditorUtility.OpenFilePanel("Import Weapon Data from CSV", "", "csv");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            string[] lines = File.ReadAllLines(path);
+            foreach (string line in lines.Skip(1)) // Skip header line
+            {
+                string[] values = ParseCSVLine(line); // Using custom parsing
+
+                if (values.Length != 13)
+                {
+                    Debug.LogError("CSV line does not have exactly 13 values. Skipping line.");
+                    continue;
+                }
+
+                Weapon newWeapon = ScriptableObject.CreateInstance<Weapon>();
+                newWeapon.itemName = values[0];
+                newWeapon.icon = AssetDatabase.LoadAssetAtPath<Sprite>(values[1]);
+                newWeapon.weaponType = (WeaponType)Enum.Parse(typeof(WeaponType), values[2]);
+                newWeapon.attackPower = float.Parse(values[3]);
+                newWeapon.attackSpeed = float.Parse(values[4]);
+                newWeapon.durability = float.Parse(values[5]);
+                newWeapon.range = float.Parse(values[6]);
+                newWeapon.criticalHitChance = float.Parse(values[7]);
+                newWeapon.baseValue = float.Parse(values[8]);
+                newWeapon.rarity = (Rarity)Enum.Parse(typeof(Rarity), values[9]);
+                newWeapon.requiredLevel = int.Parse(values[10]);
+                newWeapon.equipSlot = (EquipSlot)Enum.Parse(typeof(EquipSlot), values[11]);
+                newWeapon.description = values[12];
+
+                string assetPath = $"Assets/Resources/Weapons/{newWeapon.itemName}.asset";
+                AssetDatabase.CreateAsset(newWeapon, assetPath);
+            }
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("Weapon data successfully imported from CSV.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Failed to import weapon data from CSV: {e.Message}");
+        }
+    }
+
+    private string[] ParseCSVLine(string line)
+    {
+        List<string> result = new List<string>();
+        bool inQuotes = false;
+        string currentField = "";
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        currentField += '"';
+                        i++; // Skip next quote
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    currentField += c;
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == '\t')
+                {
+                    result.Add(currentField);
+                    currentField = "";
+                }
+                else
+                {
+                    currentField += c;
+                }
+            }
+        }
+
+        result.Add(currentField);
+        return result.ToArray();
     }
 
     protected override void DeleteSelectedItem()
