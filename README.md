@@ -9,8 +9,8 @@ This Unity package provides a comprehensive system for managing weapons, armor, 
 - Filter and search weapons, armor, and potions by type and name.
 
 ## Installation Guide
-You can download the Unity package by clicking this link --> (https://shorturl.at/zHUTX)
-Open a new Unity Project and go to Assets -> Import Package -> Custom Package.
+- You can download the Unity package by clicking this link --> (https://shorturl.at/zHUTX)
+- Open a new Unity Project and go to Assets -> Import Package -> Custom Package.
 
 ## Usage
 1. Open the Database Manager editor window via `Window > Database Manager`.
